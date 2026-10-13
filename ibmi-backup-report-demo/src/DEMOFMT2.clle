@@ -1,0 +1,235 @@
+/* Sanitized demo adaptation of the supplied CL/SQL report formatter. */
+PGM
+   DCL VAR(&MSG) TYPE(*CHAR) LEN(132)
+
+   /* Any unmonitored CPF/SQL error jumps to ERROR */
+   MONMSG MSGID(CPF0000 SQL0000) EXEC(GOTO CMDLBL(ERROR))
+
+   /* ---------------- Cleanup previous lines table ---------------- */
+   DLTF FILE(DEMOLIB/DEMOLNS2)
+   MONMSG MSGID(CPF2105)
+
+   RUNSQL SQL('CREATE TABLE DEMOLIB/DEMOLNS2 +
+              (REPORT_LINE CHAR(132))') COMMIT(*NONE)
+
+   /* ---------------- Report title ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''='', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''                     DEMO BACKUP REPORT'')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''='', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''REPORT GENERATED : '' CONCAT +
+              VARCHAR_FORMAT(CURRENT_TIMESTAMP, +
+              ''YYYY-MM-DD HH24:MI''))') COMMIT(*NONE)
+
+   /* ---------------- Backup summary ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''BACKUP SUMMARY'')') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   /* At-a-glance status */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''OVERALL STATUS: '' CONCAT +
+              CASE +
+              WHEN BACKUP_STATUS = ''STALE'' THEN +
+                 ''ATTENTION - LAST BACKUP IS OLD'' +
+              WHEN BACKUP_STATUS = ''ACTIVE'' THEN +
+                 ''ATTENTION - BACKUP HAS NOT ENDED'' +
+              WHEN NOT EXISTS (SELECT 1 FROM DEMOLIB/MEDIATMP2) THEN +
+                 ''ATTENTION - NO MEDIA RECORD FOUND'' +
+              ELSE ''OK'' END +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''CONTROL GROUP : '' CONCAT +
+              RTRIM(CONTROL_GROUP) +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''STATUS        : '' CONCAT +
+              BACKUP_STATUS +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''START TIME    : '' CONCAT +
+              COALESCE(VARCHAR_FORMAT(START_TIME, +
+              ''YYYY-MM-DD HH24:MI''), ''N/A'') +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''END TIME      : '' CONCAT +
+              COALESCE(VARCHAR_FORMAT(END_TIME, +
+              ''YYYY-MM-DD HH24:MI''), ''N/A'') +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''RUN TIME      : '' CONCAT +
+              CASE WHEN RUN_SECONDS IS NULL THEN ''N/A'' +
+              ELSE TRIM(CHAR(INT(CEILING(RUN_SECONDS / 60.0)))) +
+              CONCAT '' MINUTE(S)'' END +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''VOLUMES       : '' CONCAT +
+              TRIM(CHAR((SELECT COUNT(*) FROM DEMOLIB/MEDIATMP2))) +
+              FROM DEMOLIB/BACKUPTM2') COMMIT(*NONE)
+
+   /* ---------------- Volume information ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''VOLUME INFORMATION'')') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''VOLUME        : '' CONCAT RTRIM(VOLUME) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''STATUS        : '' CONCAT +
+              RTRIM(VOLUME_STATUS) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''TYPE          : '' CONCAT +
+              RTRIM(CARTRIDGE_TYPE) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''CLASS         : '' CONCAT +
+              RTRIM(MEDIA_CLASS) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''CREATED       : '' CONCAT +
+              COALESCE(VARCHAR_FORMAT(CREATED, ''YYYY-MM-DD''), +
+              ''N/A'') +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   /* Fallback when no media row exists */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''NO VOLUME / MEDIA RECORD FOUND'' +
+              FROM DEMOLIB/BACKUPTM2 +
+              WHERE NOT EXISTS (SELECT 1 FROM DEMOLIB/MEDIATMP2)') +
+              COMMIT(*NONE)
+
+   /* ---------------- Media location ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''MEDIA LOCATION'')') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''VOLUME        : '' CONCAT RTRIM(VOLUME) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''EXPIRATION    : '' CONCAT +
+              COALESCE(VARCHAR_FORMAT(EXPIRATION_DATE, +
+              ''YYYY-MM-DD''), ''N/A'') +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''LOCATION      : '' CONCAT +
+              RTRIM(CURRENT_LOCATION) +
+              FROM DEMOLIB/MEDIATMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''NO VOLUME / MEDIA RECORD FOUND'' +
+              FROM DEMOLIB/BACKUPTM2 +
+              WHERE NOT EXISTS (SELECT 1 FROM DEMOLIB/MEDIATMP2)') +
+              COMMIT(*NONE)
+
+   /* ---------------- Last system IPL ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(''LAST SYSTEM IPL'')') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''-'', 60))') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''IPL DATE/TIME : '' CONCAT +
+              COALESCE(VARCHAR_FORMAT(IPL_TIMESTAMP, +
+              ''YYYY-MM-DD HH24:MI''), ''N/A'') +
+              FROM DEMOLIB/IPLTMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''MESSAGE       : '' CONCAT +
+              RTRIM(COALESCE(IPL_REASON, '' '')) +
+              FROM DEMOLIB/IPLTMP2') COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              SELECT ''IPL DATE/TIME : NONE IN LAST 30 DAYS'' +
+              FROM DEMOLIB/BACKUPTM2 +
+              WHERE NOT EXISTS (SELECT 1 FROM DEMOLIB/IPLTMP2)') +
+              COMMIT(*NONE)
+
+   /* ---------------- Footer ---------------- */
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 VALUES('' '')') +
+              COMMIT(*NONE)
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/DEMOLNS2 +
+              VALUES(REPEAT(''='', 60))') COMMIT(*NONE)
+
+   /* ---------------- Copy lines to the print file ---------------- */
+   CPYF FROMFILE(DEMOLIB/DEMOLNS2) TOFILE(DEMOLIB/DEMOPRTF2) +
+          MBROPT(*REPLACE) FMTOPT(*NOCHK)
+
+   RETURN
+
+ERROR:
+   CHGVAR VAR(&MSG) VALUE('DEMOFMT2 FAILED - SEE JOB LOG')
+   SNDPGMMSG MSGID(CPF9898) MSGF(QCPFMSG) MSGDTA(&MSG) +
+               MSGTYPE(*ESCAPE)
+ENDPGM

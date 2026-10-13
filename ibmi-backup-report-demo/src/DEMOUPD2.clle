@@ -1,0 +1,133 @@
+/* Sanitized demo adaptation of the supplied CL/SQL report driver. */
+PGM
+   DCL VAR(&CTLGRP)   TYPE(*CHAR) LEN(10) VALUE('DEMOCTL')
+   DCL VAR(&STALEHRS) TYPE(*CHAR) LEN(3)  VALUE('36')
+   DCL VAR(&ROWCNT)   TYPE(*DEC)  LEN(10 0)
+   DCL VAR(&STEP)     TYPE(*CHAR) LEN(40)
+   DCL VAR(&MSG)      TYPE(*CHAR) LEN(132)
+   DCL VAR(&SQL)      TYPE(*CHAR) LEN(1000)
+
+   /* Any unmonitored CPF/SQL error jumps to ERROR */
+   MONMSG MSGID(CPF0000 SQL0000) EXEC(GOTO CMDLBL(ERROR))
+
+   SNDPGMMSG MSG('Demo backup report generation started') +
+               MSGTYPE(*INFO)
+
+   /* ---------------- Step 1: Cleanup ---------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 1 - CLEANUP')
+
+   DLTF FILE(DEMOLIB/BACKUPTM2)
+   MONMSG MSGID(CPF2105)
+
+   DLTF FILE(DEMOLIB/MEDIATMP2)
+   MONMSG MSGID(CPF2105)
+
+   DLTF FILE(DEMOLIB/IPLTMP2)
+   MONMSG MSGID(CPF2105)
+
+   /* ---------------- Step 2: Create work tables ---------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 2 - CREATE WORK TABLES')
+
+   RUNSQL SQL('CREATE TABLE DEMOLIB/BACKUPTM2 +
+              (CONTROL_GROUP VARCHAR(10), +
+               BACKUP_STATUS VARCHAR(15), +
+               START_TIME TIMESTAMP, +
+               END_TIME TIMESTAMP, +
+               RUN_SECONDS INTEGER, +
+               VOLUMES VARCHAR(10))') COMMIT(*NONE)
+
+   RUNSQL SQL('CREATE TABLE DEMOLIB/MEDIATMP2 +
+              (VOLUME CHAR(10), +
+               VOLUME_STATUS CHAR(10), +
+               CARTRIDGE_TYPE CHAR(10), +
+               MEDIA_CLASS CHAR(10), +
+               CREATED DATE, +
+               EXPIRATION_DATE DATE, +
+               CURRENT_LOCATION CHAR(10))') COMMIT(*NONE)
+
+   RUNSQL SQL('CREATE TABLE DEMOLIB/IPLTMP2 +
+              (IPL_TIMESTAMP TIMESTAMP, +
+               IPL_REASON CHAR(100))') COMMIT(*NONE)
+
+   /* ---------------- Step 3: Latest backup for &CTLGRP -------------- */
+   /* Status: ACTIVE = no end time, STALE = ended > &STALEHRS hrs ago,  */
+   /* COMPLETED = ended recently. The control group is used ONLY here. */
+   CHGVAR VAR(&STEP) VALUE('STEP 3 - BACKUP DATA')
+
+   CHGVAR VAR(&SQL) VALUE('INSERT INTO DEMOLIB/BACKUPTM2 +
+            SELECT CONTROL_GROUP, +
+            CASE +
+              WHEN SAVE_END IS NULL THEN ''ACTIVE'' +
+              WHEN SAVE_END < CURRENT_TIMESTAMP - ' *CAT &STALEHRS +
+              *TCAT ' HOURS THEN ''STALE'' +
+              ELSE ''COMPLETED'' +
+            END, +
+            SAVE_START, SAVE_END, +
+            TIMESTAMPDIFF(2, CHAR(SAVE_END - SAVE_START)), +
+            SUBSTR(VOLUMES, 1, 10) +
+            FROM BRMSLIB/CG_BACKUP_STATUS +
+            WHERE CONTROL_GROUP = ''' *CAT &CTLGRP *TCAT ''' +
+            ORDER BY SAVE_START DESC FETCH FIRST 1 ROW ONLY')
+
+   RUNSQL SQL(&SQL) COMMIT(*NONE)
+
+   /* ---------------- Step 4: Validate ---------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 4 - VALIDATE BACKUP DATA')
+
+   RTVMBRD FILE(DEMOLIB/BACKUPTM2) NBRCURRCD(&ROWCNT)
+
+   IF COND(&ROWCNT *EQ 0) THEN(DO)
+      CHGVAR VAR(&STEP) VALUE('NO BRMS DATA FOUND FOR CONTROL GROUP')
+      GOTO CMDLBL(ERROR)
+   ENDDO
+
+   /* ---------------- Step 5: Media for that backup ---------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 5 - MEDIA DATA')
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/MEDIATMP2 +
+              SELECT M.VOLUME_SERIAL, M.VOLUME_STATUS, +
+                     M.CARTRIDGE_TYPE, M.MEDIA_CLASS, M.CREATED, +
+                     M.EXPIRATION_DATE, M.CURRENT_LOCATION +
+              FROM DEMOLIB/BACKUPTM2 B +
+              JOIN BRMSLIB/MEDIA_INFO M +
+                ON M.VOLUME_SERIAL = B.VOLUMES') COMMIT(*NONE)
+
+   /* ---------------- Step 6: Last IPL (30 day window) ---------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 6 - IPL DATA')
+
+   RUNSQL SQL('INSERT INTO DEMOLIB/IPLTMP2 +
+              (IPL_TIMESTAMP, IPL_REASON) +
+              SELECT MESSAGE_TIMESTAMP, MESSAGE_TEXT +
+              FROM TABLE(QSYS2.HISTORY_LOG_INFO( +
+                   START_TIME => +
+                   CURRENT_TIMESTAMP - 30 DAYS)) H +
+              WHERE MESSAGE_ID = ''CPF0934'' +
+              ORDER BY MESSAGE_TIMESTAMP DESC +
+              FETCH FIRST 1 ROW ONLY') COMMIT(*NONE)
+
+   /* ---------------- Step 7: Build and print the report ------------- */
+   CHGVAR VAR(&STEP) VALUE('STEP 7 - FORMAT REPORT (DEMOFMT2)')
+
+   CALL PGM(DEMOUSR/DEMOFMT2)
+
+   /* ---------------- Step 8: Spool -> PDF -> email ------------------ */
+   /* TEST recipient below. Replace with a team mailbox before live.   */
+   CHGVAR VAR(&STEP) VALUE('STEP 8 - PDF AND EMAIL')
+
+   SNDSPLPDF FILE(DEMOPRTF2) SUBJECT('Demo Backup Report (TEST)') +
+               SPLNBR(*LAST) SENDTO(*INT) +
+               TEXT('Demo backup report - test version') +
+               INTADR((DEMO.USER@EXAMPLE.COM))
+
+   SNDPGMMSG MSG('Demo backup report generation completed') +
+               MSGTYPE(*COMP)
+
+   RETURN
+
+ERROR:
+   CHGVAR VAR(&MSG) VALUE('DEMOUPD2 FAILED AT: ' *CAT &STEP)
+   SNDMSG MSG(&MSG) TOMSGQ(QSYSOPR)
+   MONMSG MSGID(CPF0000)
+   SNDPGMMSG MSGID(CPF9898) MSGF(QCPFMSG) MSGDTA(&MSG) +
+               MSGTYPE(*ESCAPE)
+ENDPGM
